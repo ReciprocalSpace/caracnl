@@ -181,13 +181,6 @@ class BaseNonlinearModel(BaseModel):
         kappa = np.max(roots)
         rho = kappa ** d
         q_nl_inv = rho ** (n / d)
-        if isinstance(q_nl_inv, complex):
-            print(True)
-            print("roots", roots)
-            print("rho", rho)
-            print("q_nl_inv", q_nl_inv)
-            print("kappa", kappa)
-
         return q_nl_inv
 
 
