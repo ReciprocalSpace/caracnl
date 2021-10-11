@@ -17,7 +17,6 @@ class TestingSuite:
         caracnl.display_s11(P_r, omega, s11, title="test linear_model")
 
     def test_mono_nonlinear_model(self) -> None:
-        #P_r = np.logspace(-1, 1, 5)
         params = caracnl.models.NonlinearModelParameters(15, 14, 1.)
 
         nonlinear_model = caracnl.models.get_model(Q_c, Q_lin, omega_0, params)
@@ -43,11 +42,14 @@ class TestingSuite:
 
         caracnl.display_s11(P_r, omega, s11, s11*1.1,  title="test display_s11", display_marker=False)
 
+    def test_import(self) -> None:
+        pass
+
 
 if __name__ == '__main__':
     testing_suite = TestingSuite()
 
     # testing_suite.test_linear_model()
-    testing_suite.test_mono_nonlinear_model()
+    # testing_suite.test_mono_nonlinear_model()
     # testing_suite.test_multi_nonlinear_model()
-    # testing_suite.test_display_s11()
+    testing_suite.test_display_s11()
