@@ -1,11 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from caracnl import diophantine_approx
-from caracnl import display_s11
-from caracnl.models import get_model
+# from caracnl import diophantine_approx
+# from caracnl import display_s11
+# from caracnl.models import get_model
 
-from lmfit import Model
+import caracnl
+from lmfit import Model, report_fit
 from numpy import pi
 
 
@@ -17,34 +18,47 @@ def _complex_to_real(z):  # complex vector of length n -> real of length 2n
     return np.concatenate((np.real(z), np.imag(z)))
 
 
+def _real_to_complex(x):  # real vector of length 2n -> complex of length n
+    ind = int(len(x) / 2)
+    return x[:ind] + x[ind:] * 1.j
+
+
 def _fit_function_linear_model(omega, Q_c, q_lin, omega_0, phi, z_r, z_i):
     Q_lin = Q_c * q_lin
-    linear_model = get_model(Q_c, Q_lin, omega_0)
+    linear_model = caracnl.models.get_model(Q_c, Q_lin, omega_0)
     omega = omega[0:int(len(omega) / 2)]
-    mod_s11 = linear_model.evaluate([1.], omega) * np.exp(1j * phi) + z_r + 1j * z_i
-    return _complex_to_real(mod_s11)
+    mod_s11 = linear_model.evaluate(omega) * np.exp(1j * phi) + z_r + 1j * z_i
+    return _complex_to_real(mod_s11[0])
 
 
 def get_correction_parameters(omega: np.ndarray, s11: np.ndarray, p0=None, display=True, translation=False):
     # Model construction
-    my_model = Model(_fit_function_linear_model)
+    my_model = Model(_fit_function_linear_model, independent_vars=['omega'])
 
     # Initial values for the model parameters
     # Gives a first approximation of the parameters value if no initial guess if provided
     if p0 is None:
-        Q_c = 500
-        q_lin = 10
-        ind = np.argmax(np.norm(s11))
+        z_0 = (s11[0] + s11[-1]) / 2
+        ind = np.argmax(np.absolute(s11 - z_0))
         omega_0 = omega[ind]
         z_max = s11[ind]
-        z_0 = (s11[0] + s11[-1]) / 2
         phi = np.angle(z_max - z_0)
+        q_t = np.absolute(z_max)
+        q_lin = (q_t**-1-1)**-1
+        ind = np.argmin( np.absolute( (np.absolute(s11-z_0) - np.absolute(s11[ind]-z_0)/2) ) )
+        x = (omega[ind]-omega_0)/omega_0
+        Q_c = np.sqrt(3/4/q_t**2/x**2)
         z_r = 0 if not translation else np.real(z_0)
         z_i = 0 if not translation else np.imag(z_0)
-
         p0 = [Q_c, q_lin, omega_0, phi, z_r, z_i]
 
-    parameters = my_model.make_params(Q_c=p0[0], q_lin=p0[1], omega_0=p0[2], phi=p0[3], z_r=p0[4], z_i=p0[5])
+    parameters = my_model.make_params(Q_c=p0[0],
+                                      q_lin=p0[1],
+                                      omega_0=p0[2],
+                                      phi=p0[3],
+                                      z_r=p0[4],
+                                      z_i=p0[5])
+
     if not translation:
         parameters['z_r'].vary = False
         parameters['z_i'].vary = False
@@ -56,36 +70,40 @@ def get_correction_parameters(omega: np.ndarray, s11: np.ndarray, p0=None, displ
     parameters['phi'].min = -pi
     parameters['phi'].max = pi
 
-    result = my_model.fit(_complex_to_real(s11), parameters, x=np.concatenate((omega.copy(), omega.copy())),)
+    print("_complex_to_real(s11).shape", _complex_to_real(s11).shape)
 
-    return result
-    # t_inf_97_5 = 1.960  # coeff de student pour 3σ
-    # delta_p_opt = t_inf_97_5 * np.sqrt(np.diagonal(p_cov))
+    result = my_model.fit(_complex_to_real(s11),
+                          parameters,
+                          omega=np.concatenate((omega.copy(), omega.copy())), )
+    report_fit(result)
+    print(result.values)
 
-    # if not translation:
-    #     p_opt = np.append(p_opt, [0., 0.])
-    #     delta_p_opt = np.append(delta_p_opt, [0., 0.])
+    if display:
+        s11_mod = _fit_function_linear_model(np.concatenate([omega, omega]), **result.values)
+        s11_mod = _real_to_complex(s11_mod)
 
-    # if display:
-    #     s11_mod = mod_s11_lin(omega, *tuple(p_opt[0:3]))
-    #     s11_cor = correct_s11(s11, p_opt)
-    #
-    #     S11 = np.array([s11, s11_cor, s11_mod])  # Data avant et après correction + modèle
-    #
-    #     plt.figure(figsize=(16 / 2.54, 6 / 2.54), dpi=300)
-    #     plt.plot(omega / 2 / pi / 1e6, np.absolute(s11_mod - s11_cor))
-    #     plt.xlabel("Fréquence [MHz]", fontsize=9)
-    #     plt.ylabel(r"Erreur $|s_{11}^{mod} - s_{11}^{cor}|$ ")
-    #     # plt.legend(["Data", "Data corrigée", "Ajustement")
-    #     plt.show()
-    #
-    #     display_s11(omega, S11, (f"$Q_c=${p_opt[0]:.0f} $\pm$ {delta_p_opt[0]:.0f};    " +
-    #                              r"$q_{lin}=$" + f"{p_opt[1]:.3f} $\pm$ {delta_p_opt[1]:.3f};    " +
-    #                              f"$\omega=${p_opt[2] / 2 / pi / 1e6:.2f} $\pm$ {delta_p_opt[2] / 2 / pi / 1e6:.2f} MHz"),
-    #                 small_smith_chart=False)
-    #
+        # s11_cor = correct_s11(s11, p_opt)
+
+        # S11 = np.array([s11, s11_cor, s11_mod])  # Data avant et après correction + modèle
+        S11_mod = np.array([s11_mod])
+
+        # plt.figure(figsize=(16 / 2.54, 6 / 2.54), dpi=300)
+        # plt.plot(omega / 2 / pi / 1e6, np.absolute(s11_mod - s11_cor))
+        # plt.xlabel("Fréquence [MHz]", fontsize=9)
+        # plt.ylabel(r"Erreur $|s_{11}^{mod} - s_{11}^{cor}|$ ")
+        # # plt.legend(["Data", "Data corrigée", "Ajustement")
+        # plt.show()
+
+        caracnl.display_s11(np.array([1.]), omega, s11=np.array([s11]), s11_model=S11_mod,
+                            labels=["Exp", "Mod"]
+                    # title=(f"$Q_c=${p_opt[0]:.0f} $\pm$ {delta_p_opt[0]:.0f};    " +
+                    #        r"$q_{lin}=$" + f"{p_opt[1]:.3f} $\pm$ {delta_p_opt[1]:.3f};    " +
+                    #        f"$\omega=${p_opt[2] / 2 / pi / 1e6:.2f} $\pm$ {delta_p_opt[2] / 2 / pi / 1e6:.2f} MHz"),
+                    )
+
+
+
     # return p_opt, delta_p_opt
-
 
 # def show_error_plot(X, P_s, P_VNA, res, ndPnl, ind=None):
 #     epsilon = 1 / len(P_VNA) * np.sqrt(res)

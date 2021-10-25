@@ -315,4 +315,4 @@ def get_s11_data_from_file(DirOI, sans_ampli=True):
         P_VNA = 10 ** (0.1 * np.array(P_VNA))
         S11 = np.array(S11)
 
-    return ω, S11, P_VNA
+    return P_VNA, ω, S11
