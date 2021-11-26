@@ -8,7 +8,7 @@ Created on Wed Oct  6 16:28:01 2021
 import numpy as np
 from abc import abstractmethod, ABC
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union
 
 
 @dataclass
@@ -51,7 +51,7 @@ class LinearModel(BaseModel):
     def __init__(self, Q_c, Q_lin, omega_0) -> None:
         super().__init__(Q_c, Q_lin, omega_0)
 
-    def evaluate(self, omega: np.ndarray, P_r=np.array([1])) -> np.ndarray:
+    def evaluate(self, omega: Union[float, np.ndarray], P_r: Union[float, np.ndarray] = np.array([1])) -> Union[float, np.ndarray]:
         """
         Evaluate the model at a set of frequencies defined by omega.
 
@@ -71,6 +71,12 @@ class LinearModel(BaseModel):
             omega.
 
         """
+        if isinstance(P_r, float):
+            P_r = np.array([P_r])
+
+        if isinstance(omega, float):
+            omega = np.array([omega])
+
         Q_c = self.Q_c
         q_lin = self.Q_lin / self.Q_c
         omega_0 = self.omega_0
@@ -78,7 +84,9 @@ class LinearModel(BaseModel):
         y = Q_c * (omega - omega_0) / omega_0
         s11 = q_t * 1 / (1 + 2j * q_t * y)
         S11 = np.array([s11.copy() for _ in range(len(P_r))])
-        return S11
+
+        S11 = np.squeeze(S11)
+        return S11[0] if S11.shape == (1,) else S11
 
 
 class BaseNonlinearModel(BaseModel):
@@ -219,7 +227,7 @@ class MonoNonlinearModel(BaseNonlinearModel):
         self.model_parameters = model_parameters
 
     # noinspection DuplicatedCode
-    def evaluate(self, omega: np.ndarray, P_r: np.ndarray) -> np.ndarray:
+    def evaluate(self, omega: Union[float, np.ndarray], P_r: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """
         Evaluate the non-linear model at set of frequency omega and a set of readout
         power P_r  (ofter P_vna). The output is a 2-dimensional matrix of size
@@ -238,6 +246,12 @@ class MonoNonlinearModel(BaseNonlinearModel):
         S11 : numpy.ndarray
             Reflexion coefficient s11 evaluated at P_r and omega.
         """
+        if isinstance(P_r, float):
+            P_r = np.array([P_r])
+
+        if isinstance(omega, float):
+            omega = np.array([omega])
+
         q_lin = self.Q_lin / self.Q_c
         rho_r = P_r / self.model_parameters.P_cnl
 
@@ -252,8 +266,8 @@ class MonoNonlinearModel(BaseNonlinearModel):
 
         y = self.Q_c * (omega - self.omega_0) / self.omega_0
         s11 = q_t * 1 / (1 + 2j * q_t * y)
-
-        return s11
+        s11 = np.squeeze(s11)
+        return s11[0] if s11.shape == (1,) else s11
 
 
 class MultiNonlinearModel(BaseNonlinearModel):
@@ -300,14 +314,20 @@ class MultiNonlinearModel(BaseNonlinearModel):
         ----------
         omega : numpy.ndarray
             Vector of frequencies where the model is evaluated.
-        P_r : numpy.ndarray
+        P_r : float or numpy.ndarray
             Vector of readout power where the model is evaluated.
 
         Returns
         -------
-        S11 : numpy.ndarray
+        S11 : float or numpy.ndarray
             Reflexion coefficient s11 evaluated at P_r and omega.
         """
+        if isinstance(P_r, float):
+            P_r = np.array([P_r])
+
+        if isinstance(omega, float):
+            omega = np.array([omega])
+
         q_lin = self.Q_lin / self.Q_c
 
         q_nl_inv = np.zeros((len(P_r), len(omega), len(self.model_parameters)))
@@ -331,7 +351,8 @@ class MultiNonlinearModel(BaseNonlinearModel):
         q_t = (1 + q_lin ** -1 + np.sum(q_nl_inv, axis=2)) ** -1
         y = self.Q_c * (omega - self.omega_0) / self.omega_0
         s11 = q_t * 1 / (1 + 2j * q_t * y)
-        return s11
+        s11 = np.squeeze(s11)
+        return s11[0] if s11.shape == (1,) else s11
 
 
 def get_model(Q_c: float, Q_lin: float, omega_0: float,
