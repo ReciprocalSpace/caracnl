@@ -8,30 +8,37 @@ import matplotlib.pyplot as plt
 import caracnl
 from lmfit import Model, report_fit
 from numpy import pi
+from dataclasses import dataclass
 
 
 def correct_s11(s11: np.ndarray, z: complex, phi: float):
+    """Rotate and translate the s11 data"""
     return (s11 - z) * np.exp(-1j * phi)  # Corrected data
 
 
 def _complex_to_real(z):  # complex vector of length n -> real of length 2n
+    """Convert an array of complex of length n to an array of real of length 2n"""
     return np.concatenate((np.real(z), np.imag(z)))
 
 
 def _real_to_complex(x):  # real vector of length 2n -> complex of length n
+    """Convert an array of real of length 2n to an array of complex of length n"""
     ind = int(len(x) / 2)
     return x[:ind] + x[ind:] * 1.j
 
 
 def _fit_function_linear_model(omega, Q_c, q_lin, omega_0, phi, z_r, z_i):
+    """Function used to fit the linear case"""
     Q_lin = Q_c * q_lin
     linear_model = caracnl.models.get_model(Q_c, Q_lin, omega_0)
     omega = omega[0:int(len(omega) / 2)]
     mod_s11 = linear_model.evaluate(omega) * np.exp(1j * phi) + z_r + 1j * z_i
-    return _complex_to_real(mod_s11[0])
+    return _complex_to_real(mod_s11)
+
 
 
 def get_correction_parameters(omega: np.ndarray, s11: np.ndarray, p0=None, display=True, translation=False):
+    """Extract the parameters used"""
     # Model construction
     my_model = Model(_fit_function_linear_model, independent_vars=['omega'])
 
@@ -70,21 +77,26 @@ def get_correction_parameters(omega: np.ndarray, s11: np.ndarray, p0=None, displ
     parameters['phi'].min = -pi
     parameters['phi'].max = pi
 
-    print("_complex_to_real(s11).shape", _complex_to_real(s11).shape)
+    # print("_complex_to_real(s11).shape", _complex_to_real(s11).shape)
 
     result = my_model.fit(_complex_to_real(s11),
                           parameters,
                           omega=np.concatenate((omega.copy(), omega.copy())), )
-    report_fit(result)
-    print(result.values)
+    conf_interval = result.conf_interval()
+
+    p_opt = []
+    delta_p_opt = []
+    for key in ["Q_c", "q_lin", "omega_0", "phi", "z_r", "z_i"]:
+        value = result.values.get(key, None)
+        upper_interval = conf_interval.get(key, None)
+        if upper_interval is not None:
+            uncertainty = abs(upper_interval[5][1] - value)
+        p_opt.append(value)
+        delta_p_opt.append(uncertainty)
+
 
     if display:
-        s11_mod = _fit_function_linear_model(np.concatenate([omega, omega]), **result.values)
-        s11_mod = _real_to_complex(s11_mod)
-
-        # s11_cor = correct_s11(s11, p_opt)
-
-        # S11 = np.array([s11, s11_cor, s11_mod])  # Data avant et après correction + modèle
+        s11_mod = _real_to_complex(result.best_fit)
         S11_mod = np.array([s11_mod])
 
         # plt.figure(figsize=(16 / 2.54, 6 / 2.54), dpi=300)
@@ -93,17 +105,17 @@ def get_correction_parameters(omega: np.ndarray, s11: np.ndarray, p0=None, displ
         # plt.ylabel(r"Erreur $|s_{11}^{mod} - s_{11}^{cor}|$ ")
         # # plt.legend(["Data", "Data corrigée", "Ajustement")
         # plt.show()
+        # report_fit(result)
 
         caracnl.display_s11(np.array([1.]), omega, s11=np.array([s11]), s11_model=S11_mod,
-                            labels=["Exp", "Mod"]
-                    # title=(f"$Q_c=${p_opt[0]:.0f} $\pm$ {delta_p_opt[0]:.0f};    " +
-                    #        r"$q_{lin}=$" + f"{p_opt[1]:.3f} $\pm$ {delta_p_opt[1]:.3f};    " +
-                    #        f"$\omega=${p_opt[2] / 2 / pi / 1e6:.2f} $\pm$ {delta_p_opt[2] / 2 / pi / 1e6:.2f} MHz"),
-                    )
+                            labels=["Exp", "Mod"],
+                            title=(f"$Q_c=${p_opt[0]:.0f} $\pm$ {delta_p_opt[0]:.0f};    " 
+                                   r"$q_{lin}=$" + f"{p_opt[1]:.3f} $\pm$ {delta_p_opt[1]:.3f};    " 
+                                   f"$\omega=${p_opt[2] / 2 / pi / 1e6:.2f} $\pm$ {delta_p_opt[2] / 2 / pi / 1e6:.2f} MHz"))
 
 
 
-    # return p_opt, delta_p_opt
+    return p_opt, delta_p_opt
 
 # def show_error_plot(X, P_s, P_VNA, res, ndPnl, ind=None):
 #     epsilon = 1 / len(P_VNA) * np.sqrt(res)

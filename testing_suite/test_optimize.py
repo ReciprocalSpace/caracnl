@@ -11,7 +11,7 @@ class TestingSuite:
         caracnl.display_s11(P_VNA, omega, S11)
 
         result = caracnl.optimize.get_correction_parameters(omega, S11[0], )
-        print(result)
+        # print(result)
 
         return result
 

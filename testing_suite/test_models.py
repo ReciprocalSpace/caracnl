@@ -50,6 +50,6 @@ if __name__ == '__main__':
     testing_suite = TestingSuite()
 
     testing_suite.test_linear_model()
-    # testing_suite.test_mono_nonlinear_model()
-    # testing_suite.test_multi_nonlinear_model()
-    # testing_suite.test_display_s11()
+    testing_suite.test_mono_nonlinear_model()
+    testing_suite.test_multi_nonlinear_model()
+    testing_suite.test_display_s11()

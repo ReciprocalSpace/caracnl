@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import List, Union
 
 
+
 @dataclass
 class NonlinearModelParameters:
     """Contains the parameter values for a nonlinear mechanism"""
